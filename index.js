@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 7000;
 
 // Middlewear
@@ -27,9 +27,52 @@ async function run() {
     // Add Query
     app.post('/add-query', async (req, res) => {
       const query = req.body
-
-      const result = await queryCollection.insertOne(query)
+      const result = await queryCollection.insertOne(query);
       res.send(result)
+    })
+
+    // Get all queries
+    app.get('/queries', async (req, res) => {
+      const result = await queryCollection.find().toArray()
+      res.send(result);
+    })
+
+    // Get user posted query by email and sort in decending order;
+    app.get('/queries/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { 'queryPoster.email': email };
+      const option = { sort: { 'queryPoster.currentDateAndTime': -1 } }
+      const result = await queryCollection.find(query, option).toArray();
+      res.send(result);
+    })
+
+    // Get one query by ID------
+    app.get('/query/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await queryCollection.findOne(query);
+      res.send(result)
+    })
+
+    // Delete a posted query--
+    app.delete('/delete-query/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await queryCollection.deleteOne(query);
+      res.send(result)
+    })
+
+    // update query------->
+    app.put('/update-query/:id', async (req, res) => {
+      const id = req.params.id;
+      const updateQuery = req.body;
+      const filter = { _id: new ObjectId(id) }
+      const option = { upsert: true }
+      const updatedDocs = {
+        $set: updateQuery,
+      }
+      const result = await queryCollection.updateOne(filter, updatedDocs, option);
+      res.send(result);
     })
 
     // await client.connect();
