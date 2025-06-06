@@ -26,14 +26,25 @@ async function run() {
 
     // Add Query
     app.post('/add-query', async (req, res) => {
-      const query = req.body
+      const query = req.body;
+      
       const result = await queryCollection.insertOne(query);
       res.send(result)
     })
 
     // Get all queries
     app.get('/queries', async (req, res) => {
-      const result = await queryCollection.find().toArray()
+      const {home,category} = req.query;
+
+      let query = {}
+      if(category){
+        query.queryCategory = category;
+      }
+      const option = { sort: { 'queryPoster.currentDateAndTime': -1 } };
+      if(home){
+        option.limit = 7;
+      }
+      const result = await queryCollection.find(query,option).toArray()
       res.send(result);
     })
 
