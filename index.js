@@ -23,28 +23,29 @@ async function run() {
   try {
 
     const queryCollection = client.db("QueryNestCollection").collection("queries");
+    const recommendationCollection = client.db("QueryNestCollection").collection("Recommendations");
 
     // Add Query
     app.post('/add-query', async (req, res) => {
       const query = req.body;
-      
+
       const result = await queryCollection.insertOne(query);
       res.send(result)
     })
 
     // Get all queries
     app.get('/queries', async (req, res) => {
-      const {home,category} = req.query;
+      const { home, category } = req.query;
 
       let query = {}
-      if(category){
+      if (category) {
         query.queryCategory = category;
       }
       const option = { sort: { 'queryPoster.currentDateAndTime': -1 } };
-      if(home){
+      if (home) {
         option.limit = 7;
       }
-      const result = await queryCollection.find(query,option).toArray()
+      const result = await queryCollection.find(query, option).toArray()
       res.send(result);
     })
 
@@ -84,6 +85,72 @@ async function run() {
       }
       const result = await queryCollection.updateOne(filter, updatedDocs, option);
       res.send(result);
+    })
+
+    // Add Recommendation
+    app.post('/add-recommendation', async (req, res) => {
+      const recommendData = req.body;
+
+      if (recommendData?.recommenderEmail === recommendData?.queryCreator) return res.status(403).send({ message: "You cannot recommend on your own query." })
+
+      const result = await recommendationCollection.insertOne(recommendData); // Recommendation store in db
+
+      const filter = { _id: new ObjectId(recommendData?.queryId) }
+      const update = {
+        $inc: {
+          'queryPoster.recommendationCount': 1
+        }
+      }
+      const updateRecoCount = await queryCollection.updateOne(filter, update)
+      res.send(result)
+    })
+    // Get all recommendation
+    app.get('/recommendations', async (req, res) => {
+      const result = await recommendationCollection.find().toArray();
+      res.send(result)
+    })
+
+    // get Recommendation By id 
+    app.get('/recommendation/:id', async (req, res) => {
+      const queryId = req.params.id;
+      const filter = { queryId: queryId };
+      const result = await recommendationCollection.find(filter).toArray()
+      res.send(result)
+
+    })
+
+    // Get Recomender Recmmendation data
+    app.get('/recommender-data/:email', async (req, res) => {
+      const email = req.params.email;
+      const { recommender } = req.query;
+
+      const query = {};
+      if (recommender) {
+        query.recommenderEmail = email;
+      } else {
+        query.queryCreator = email;
+      }
+      const option = { sort: { recommendedAt: -1 } }
+      const result = await recommendationCollection.find(query, option).toArray();
+      res.send(result)
+
+    })
+    // Delete Recommendation
+    app.delete('/delete-recommendetion/:id', async (req, res) => {
+      const id = req.params.id;
+      const queryId = req.query.queryId
+      const query = { _id: new ObjectId(id) }
+      const filter = {_id: new ObjectId(queryId)}
+
+      const update = {
+        $inc: {
+          'queryPoster.recommendationCount': -1
+        }
+      }
+
+      const dicRecoValue = await queryCollection.updateOne(filter,update);
+      const result = await recommendationCollection.deleteOne(query)
+      res.send(result)
     })
 
     // await client.connect();
