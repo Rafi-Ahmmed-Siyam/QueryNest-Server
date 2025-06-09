@@ -2,12 +2,44 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const jwt = require('jsonwebtoken')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 7000;
 
 // Middlewear
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173'
+  ],
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+// Custom Middleware
+const verifyToken = (req, res, next) => {
+  const token = req.cookies.token;
+  if (!token) return res.status(401).send({ message: 'Unauthoeized Access' })
+
+  jwt.verify(token, process.env.JWT_SECRET, (error, decoded) => {
+    if (error) return res.status(401).send({ message: 'Unauthoeized Access' });
+    req.user = decoded
+
+    
+  })
+  next();
+}
+
+const verifyEmailMatch = ()=>{
+  return (req,res,next)=>{
+    const emailFromParams = req.params.email;
+    const emailFromToken = req?.user?.email;
+    if(emailFromParams !== emailFromToken) return res.status(403).send({ message: "Forbidden Access" });
+
+    next()
+  }
+}
 
 // mongoDB
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASS}@cluster0.wsg3r.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -24,6 +56,31 @@ async function run() {
 
     const queryCollection = client.db("QueryNestCollection").collection("queries");
     const recommendationCollection = client.db("QueryNestCollection").collection("Recommendations");
+
+    // Create jwtToken
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = await jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1d' });
+      res
+        .cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ message: "Login Successfull" });
+
+    })
+
+    // DeleteToken from httpOnly cookie
+    app.get('/logOut', async (req, res) => {
+      res
+        .clearCookie('token', {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ message: "LogOut Successfull" })
+    })
 
     // Add Query
     app.post('/add-query', async (req, res) => {
@@ -50,7 +107,7 @@ async function run() {
     })
 
     // Get user posted query by email and sort in decending order;
-    app.get('/queries/:email', async (req, res) => {
+    app.get('/queries/:email', verifyToken, verifyEmailMatch(), async (req, res) => {
       const email = req.params.email;
       const query = { 'queryPoster.email': email };
       const option = { sort: { 'queryPoster.currentDateAndTime': -1 } }
@@ -140,7 +197,7 @@ async function run() {
       const id = req.params.id;
       const queryId = req.query.queryId
       const query = { _id: new ObjectId(id) }
-      const filter = {_id: new ObjectId(queryId)}
+      const filter = { _id: new ObjectId(queryId) }
 
       const update = {
         $inc: {
@@ -148,7 +205,7 @@ async function run() {
         }
       }
 
-      const dicRecoValue = await queryCollection.updateOne(filter,update);
+      const dicRecoValue = await queryCollection.updateOne(filter, update);
       const result = await recommendationCollection.deleteOne(query)
       res.send(result)
     })
