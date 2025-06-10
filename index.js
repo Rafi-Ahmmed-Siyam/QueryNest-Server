@@ -10,7 +10,9 @@ const port = process.env.PORT || 7000;
 // Middlewear
 app.use(cors({
   origin: [
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'https://query-nest246810.netlify.app',
+    'https://query-nest-client.vercel.app'
   ],
   credentials: true,
 }));
@@ -26,16 +28,16 @@ const verifyToken = (req, res, next) => {
     if (error) return res.status(401).send({ message: 'Unauthoeized Access' });
     req.user = decoded
 
-    
+
   })
   next();
 }
 
-const verifyEmailMatch = ()=>{
-  return (req,res,next)=>{
+const verifyEmailMatch = () => {
+  return (req, res, next) => {
     const emailFromParams = req.params.email;
     const emailFromToken = req?.user?.email;
-    if(emailFromParams !== emailFromToken) return res.status(403).send({ message: "Forbidden Access" });
+    if (emailFromParams !== emailFromToken) return res.status(403).send({ message: "Forbidden Access" });
 
     next()
   }
@@ -90,7 +92,7 @@ async function run() {
       res.send(result)
     })
 
-    // Get all queries
+    // Get queries for home page
     app.get('/queries', async (req, res) => {
       const { home, category } = req.query;
 
@@ -102,9 +104,24 @@ async function run() {
       if (home) {
         option.limit = 7;
       }
+
+
       const result = await queryCollection.find(query, option).toArray()
       res.send(result);
     })
+
+    // Get all queries for all query Page
+    app.get('/allQueries', async (req, res) => {
+      const search = req.query.search.trim();
+      const option = { sort: { 'queryPoster.currentDateAndTime': -1 } };
+      let query = {}
+      if (search) {
+        query.productName = { $regex: search, $options: 'i' };
+      }
+      const result = await queryCollection.find(query, option).toArray()
+      res.send(result);
+    })
+
 
     // Get user posted query by email and sort in decending order;
     app.get('/queries/:email', verifyToken, verifyEmailMatch(), async (req, res) => {
@@ -124,7 +141,7 @@ async function run() {
     })
 
     // Delete a posted query--
-    app.delete('/delete-query/:id', async (req, res) => {
+    app.delete('/delete-query/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await queryCollection.deleteOne(query);
@@ -132,7 +149,7 @@ async function run() {
     })
 
     // update query------->
-    app.put('/update-query/:id', async (req, res) => {
+    app.put('/update-query/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const updateQuery = req.body;
       const filter = { _id: new ObjectId(id) }
@@ -177,7 +194,7 @@ async function run() {
     })
 
     // Get Recomender Recmmendation data
-    app.get('/recommender-data/:email', async (req, res) => {
+    app.get('/recommender-data/:email', verifyToken, verifyEmailMatch(), async (req, res) => {
       const email = req.params.email;
       const { recommender } = req.query;
 
@@ -193,7 +210,7 @@ async function run() {
 
     })
     // Delete Recommendation
-    app.delete('/delete-recommendetion/:id', async (req, res) => {
+    app.delete('/delete-recommendetion/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const queryId = req.query.queryId
       const query = { _id: new ObjectId(id) }
@@ -220,13 +237,6 @@ async function run() {
 }
 run().catch(console.dir);
 
-
-
-
-
-
-
-
 app.get('/', (req, res) => {
   res.send("This server is for QueryNest");
 });
@@ -235,6 +245,3 @@ app.listen(port, () => {
   console.log(`The Port is now running in ${port}`);
 });
 
-
-// queryNest246810KTd
-// Query-Nest
